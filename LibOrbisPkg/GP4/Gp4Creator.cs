@@ -142,7 +142,7 @@ namespace LibOrbisPkg.GP4
       {
         ekpfs = pkg.GetEkpfs();
       }
-      using (var va = pkgFile.CreateViewAccessor((long)pkg.Header.pfs_image_offset, (long)pkg.Header.pfs_image_size, MemoryMappedFileAccess.Read))
+      using (var va = new WindowedMemoryReader(pkgFile, (long)pkg.Header.pfs_image_offset, (long)pkg.Header.pfs_image_size))
       {
         var outerPfs = new PfsReader(va, pkg.Header.pfs_flags, ekpfs);
         var inner = new PfsReader(new PFSCReader(outerPfs.GetFile("pfs_image.dat").GetView()));

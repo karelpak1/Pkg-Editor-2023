@@ -28,13 +28,13 @@ namespace PkgEditor.Views
 
     public override void Close()
     {
-      pkgFile.Dispose();
       va?.Dispose();
+      pkgFile.Dispose();
     }
 
     private Pkg pkg;
     private MemoryMappedFile pkgFile;
-    private MemoryMappedViewAccessor va;
+    private IMemoryReader va;
     private string passcode;
     public PkgView(string path)
     {
@@ -247,7 +247,7 @@ namespace PkgEditor.Views
         return false;
       try
       {
-        va = pkgFile.CreateViewAccessor((long)pkg.Header.pfs_image_offset, (long)pkg.Header.pfs_image_size, MemoryMappedFileAccess.Read);
+        va = new WindowedMemoryReader(pkgFile, (long)pkg.Header.pfs_image_offset, (long)pkg.Header.pfs_image_size);
         var outerPfs = new PfsReader(va, pkg.Header.pfs_flags, ekpfs, tweak, data);
         var innerPfsView = new PFSCReader(outerPfs.GetFile("pfs_image.dat").GetView());
         PreviewInnerPfsHeader(innerPfsView);

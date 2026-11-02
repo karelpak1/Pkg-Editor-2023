@@ -150,6 +150,74 @@ namespace LibOrbisPkg.Util
       }
     }
   }
+  /// <summary>
+  /// Reads a region of a mapped file through a bounded window. Does not own the file.
+  /// </summary>
+  public sealed class WindowedMemoryReader : IMemoryReader
+  {
+    private const int WindowSize = 16 * 1024 * 1024;
+    private readonly MemoryMappedFile file;
+    private readonly long startOffset;
+    private readonly long length;
+    private readonly object sync = new object();
+    private MemoryMappedViewAccessor view;
+    private long windowStart;
+    private bool disposed;
+
+    public WindowedMemoryReader(MemoryMappedFile file, long offset, long length)
+    {
+      if (file == null) throw new ArgumentNullException(nameof(file));
+      if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+      if (length < 0 || offset > long.MaxValue - length)
+        throw new ArgumentOutOfRangeException(nameof(length));
+      this.file = file;
+      startOffset = offset;
+      this.length = length;
+    }
+
+    public void Read(long pos, byte[] buf, int offset, int count)
+    {
+      if (buf == null) throw new ArgumentNullException(nameof(buf));
+      if (offset < 0 || count < 0 || offset > buf.Length - count)
+        throw new ArgumentOutOfRangeException(nameof(count));
+      if (pos < 0 || pos > length || count > length - pos)
+        throw new ArgumentOutOfRangeException(nameof(pos));
+
+      lock (sync)
+      {
+        if (disposed) throw new ObjectDisposedException(nameof(WindowedMemoryReader));
+        while (count > 0)
+        {
+          if (view == null || pos < windowStart || pos - windowStart >= view.Capacity)
+          {
+            // Unmap the previous window before touching the next part of a large PKG.
+            view?.Dispose();
+            view = null;
+            windowStart = pos / WindowSize * WindowSize;
+            view = file.CreateViewAccessor(startOffset + windowStart,
+              Math.Min(WindowSize, length - windowStart), MemoryMappedFileAccess.Read);
+          }
+          var inWindow = pos - windowStart;
+          var toRead = (int)Math.Min(count, view.Capacity - inWindow);
+          view.ReadArray(inWindow, buf, offset, toRead);
+          pos += toRead;
+          offset += toRead;
+          count -= toRead;
+        }
+      }
+    }
+
+    public void Dispose()
+    {
+      lock (sync)
+      {
+        disposed = true;
+        view?.Dispose();
+        view = null;
+      }
+    }
+  }
+
   public class MemoryMappedViewAccessor_ : IMemoryAccessor
   {
     private MemoryMappedViewAccessor _va;
